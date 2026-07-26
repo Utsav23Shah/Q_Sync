@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Webcam from 'react-webcam';
-import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart } from 'lucide-react';
+import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Crown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -403,7 +403,10 @@ export default function CustomerVendorPage() {
                         {q.position}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900">{q.id === ticket.id ? 'You' : q.customer_name}</p>
+                        <p className="font-bold text-slate-900 flex items-center gap-1">
+                          {q.id === ticket.id ? 'You' : q.customer_name}
+                          {q.is_vip && <Crown className="w-4 h-4 text-amber-500" />}
+                        </p>
                         <p className="text-xs text-slate-500">{q.service_booked}</p>
                       </div>
                       {q.status === 'SERVING' && <span className="ml-auto text-[10px] font-black text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">Serving</span>}
