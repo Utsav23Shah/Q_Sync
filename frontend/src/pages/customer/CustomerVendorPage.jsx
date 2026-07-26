@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import Webcam from 'react-webcam';
 import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Navigation } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -26,10 +27,7 @@ export default function CustomerVendorPage() {
   const [photo, setPhoto] = useState(null);
   const [scheduleTime, setScheduleTime] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
-  const [cameraReady, setCameraReady] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const webcamRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -150,72 +148,22 @@ export default function CustomerVendorPage() {
     }
   }
 
-  // --- CAMERA using native getUserMedia (works on ALL browsers, HTTPS, mobile) ---
-  const startCamera = async () => {
-    setIsCapturing(true);
-    setCameraReady(false);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false
-      });
-      streamRef.current = stream;
-      // Wait for videoRef to be available in DOM
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current.play();
-            setCameraReady(true);
-          };
-        }
-      }, 100);
-    } catch (err) {
-      console.error('Camera error:', err);
-      alert('Camera access denied or not available. You can join the queue without a photo.');
-      setIsCapturing(false);
-    }
-  };
-
   const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    // Mirror the image
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    setPhoto(dataUrl);
-    // Stop the camera stream
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+    if (!webcamRef.current) {
+      alert("Camera is not available. You can continue without a photo.");
+      setPhoto(null);
+      setIsCapturing(false);
+      return;
+    }
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (imageSrc) {
+      setPhoto(imageSrc);
+    } else {
+      alert("Failed to capture photo. You can continue without one.");
+      setPhoto(null);
     }
     setIsCapturing(false);
-    setCameraReady(false);
   };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsCapturing(false);
-    setCameraReady(false);
-  };
-
-  // Clean up camera on unmount
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
 
   const handleJoinQueue = async (e) => {
     e.preventDefault();
@@ -264,7 +212,7 @@ export default function CustomerVendorPage() {
     } catch (err) {
       console.error(err);
       alert("Failed to join queue. Error: " + err.message);
-    } finally {
+    } fontally {
       setLoading(false);
     }
   };
@@ -529,13 +477,9 @@ export default function CustomerVendorPage() {
     );
   }
 
-  // Hidden canvas for photo capture
-  const hiddenCanvas = <canvas ref={canvasRef} style={{ display: 'none' }} />;
-
   // --- REGISTRATION SCREEN ---
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {hiddenCanvas}
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-600/10 to-transparent blur-3xl -z-10"></div>
 
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-slate-200/50 border border-white p-8 relative z-10">
@@ -593,29 +537,27 @@ export default function CustomerVendorPage() {
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Live Photo (Optional)</label>
               {!photo && !isCapturing && (
-                <button type="button" onClick={startCamera} className="w-full h-36 border-2 border-dashed border-slate-300 bg-slate-50 rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-100 hover:border-slate-400 transition-all active:scale-[0.98]">
+                <button type="button" onClick={() => setIsCapturing(true)} className="w-full h-36 border-2 border-dashed border-slate-300 bg-slate-50 rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-100 hover:border-slate-400 transition-all active:scale-[0.98]">
                   <Camera className="w-8 h-8 mb-2 text-slate-400" />
                   <span className="font-bold">Tap to open camera</span>
                 </button>
               )}
               {isCapturing && (
                 <div className="relative rounded-2xl overflow-hidden bg-black z-10 shadow-lg border border-slate-800">
-                  <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', transform: 'scaleX(-1)' }} className="object-cover" />
-                  <div className="absolute bottom-4 left-0 w-full flex justify-center gap-3">
-                    <button type="button" onClick={capturePhoto} disabled={!cameraReady} className="px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50">
-                      {cameraReady ? 'Capture' : 'Loading...'}
-                    </button>
-                    <button type="button" onClick={stopCamera} className="px-6 py-3 bg-red-500 text-white font-bold text-sm rounded-full shadow-xl hover:bg-red-600 active:scale-95 transition-all">
-                      Cancel
-                    </button>
-                  </div>
+                  <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} mirrored={true} className="w-full object-cover" />
+                  <button type="button" onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all">
+                    Capture
+                  </button>
+                  <button type="button" onClick={() => setIsCapturing(false)} className="absolute bottom-4 right-4 px-4 py-2 bg-red-500 text-white font-bold text-xs rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all">
+                    Cancel
+                  </button>
                 </div>
               )}
               {photo && (
                 <div className="relative rounded-2xl overflow-hidden border-4 border-white shadow-xl group">
                   <img src={photo} alt="Selfie" className="w-full object-cover h-48 transition-transform group-hover:scale-105" />
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button type="button" onClick={() => {setPhoto(null); startCamera();}} className="px-5 py-2 bg-white/90 backdrop-blur-md text-slate-900 font-bold rounded-xl text-sm shadow-lg hover:scale-105 transition-all">Retake</button>
+                    <button type="button" onClick={() => {setPhoto(null); setIsCapturing(true);}} className="px-5 py-2 bg-white/90 backdrop-blur-md text-slate-900 font-bold rounded-xl text-sm shadow-lg hover:scale-105 transition-all">Retake</button>
                   </div>
                 </div>
               )}
