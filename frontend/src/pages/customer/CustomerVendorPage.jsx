@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import Webcam from 'react-webcam';
+
 import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Navigation } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -27,7 +27,7 @@ export default function CustomerVendorPage() {
   const [photo, setPhoto] = useState(null);
   const [scheduleTime, setScheduleTime] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
-  const webcamRef = useRef(null);
+
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -148,21 +148,18 @@ export default function CustomerVendorPage() {
     }
   }
 
-  const capturePhoto = () => {
-    if (!webcamRef.current) {
-      alert("Camera is not available. You can continue without a photo.");
-      setPhoto(null);
-      setIsCapturing(false);
-      return;
-    }
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (imageSrc) {
-      setPhoto(imageSrc);
+  const handleNativeCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhoto(reader.result);
+        setIsCapturing(false);
+      };
+      reader.readAsDataURL(file);
     } else {
-      alert("Failed to capture photo. You can continue without one.");
-      setPhoto(null);
+      setIsCapturing(false);
     }
-    setIsCapturing(false);
   };
 
   const handleJoinQueue = async (e) => {
@@ -543,12 +540,27 @@ export default function CustomerVendorPage() {
                 </button>
               )}
               {isCapturing && (
-                <div className="relative rounded-2xl overflow-hidden bg-black z-10 shadow-lg border border-slate-800">
-                  <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} mirrored={true} className="w-full object-cover" />
-                  <button type="button" onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all">
-                    Capture
-                  </button>
-                  <button type="button" onClick={() => setIsCapturing(false)} className="absolute bottom-4 right-4 px-4 py-2 bg-red-500 text-white font-bold text-xs rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all">
+                <div className="relative rounded-2xl overflow-hidden bg-white z-10 shadow-lg border border-slate-200 p-6 flex flex-col items-center justify-center">
+                  <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                     <Camera className="w-8 h-8" />
+                  </div>
+                  <h3 className="font-bold text-slate-900 mb-2">Take a Photo</h3>
+                  <p className="text-sm text-slate-500 mb-6 text-center">Your device camera will open securely.</p>
+                  
+                  <div className="relative w-full">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="user" 
+                      onChange={handleNativeCapture}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    />
+                    <button type="button" className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-md pointer-events-none">
+                      Open Camera
+                    </button>
+                  </div>
+                  
+                  <button type="button" onClick={() => setIsCapturing(false)} className="mt-4 px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">
                     Cancel
                   </button>
                 </div>
