@@ -142,17 +142,24 @@ export default function CustomerVendorPage() {
   }
 
   const capturePhoto = () => {
+    if (!webcamRef.current) {
+      alert("Camera is not available. You can continue without a photo.");
+      setPhoto(null);
+      setIsCapturing(false);
+      return;
+    }
     const imageSrc = webcamRef.current.getScreenshot();
-    setPhoto(imageSrc);
+    if (imageSrc) {
+      setPhoto(imageSrc);
+    } else {
+      alert("Failed to capture photo. You can continue without one.");
+      setPhoto(null);
+    }
     setIsCapturing(false);
   };
 
   const handleJoinQueue = async (e) => {
     e.preventDefault();
-    if (!photo) {
-      alert("Live photo is required.");
-      return;
-    }
     if (selectedServices.length === 0) {
       alert("Please select at least one service.");
       return;
@@ -160,13 +167,19 @@ export default function CustomerVendorPage() {
     setLoading(true);
 
     try {
-      const base64Res = await fetch(photo);
-      const blob = await base64Res.blob();
-      const fileName = `live_${Date.now()}.jpg`;
-      const { error: uploadErr } = await supabase.storage.from('live_photos').upload(fileName, blob);
-      
       let photoUrl = null;
-      if (!uploadErr) photoUrl = supabase.storage.from('live_photos').getPublicUrl(fileName).data.publicUrl;
+      if (photo) {
+        const base64Res = await fetch(photo);
+        const blob = await base64Res.blob();
+        const fileName = `live_${Date.now()}.jpg`;
+        const { error: uploadErr } = await supabase.storage.from('live_photos').upload(fileName, blob);
+        
+        if (!uploadErr) {
+          photoUrl = supabase.storage.from('live_photos').getPublicUrl(fileName).data.publicUrl;
+        } else {
+          console.error("Photo upload error:", uploadErr);
+        }
+      }
 
       const isScheduled = scheduleTime !== '';
       const { data: currentQueue } = await supabase.from('queue_tokens')
@@ -544,7 +557,7 @@ export default function CustomerVendorPage() {
             </div>
           </div>
 
-          <button type="submit" disabled={loading || !photo} className="w-full py-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-lg tracking-wide rounded-2xl shadow-xl shadow-blue-600/30 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center mt-2">
+          <button type="submit" disabled={loading} className="w-full py-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-lg tracking-wide rounded-2xl shadow-xl shadow-blue-600/30 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center mt-2">
             {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (scheduleTime ? 'Schedule Token' : 'Join Queue Now')}
           </button>
         </form>

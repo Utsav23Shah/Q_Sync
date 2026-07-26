@@ -189,8 +189,19 @@ export default function VendorDashboard() {
   };
 
   const capturePhoto = () => {
+    if (!webcamRef.current) {
+      alert("Camera is not available. You can continue without a photo.");
+      setManualPhoto(null);
+      setIsCapturing(false);
+      return;
+    }
     const imageSrc = webcamRef.current.getScreenshot();
-    setManualPhoto(imageSrc);
+    if (imageSrc) {
+      setManualPhoto(imageSrc);
+    } else {
+      alert("Failed to capture photo. You can continue without one.");
+      setManualPhoto(null);
+    }
     setIsCapturing(false);
   };
 
@@ -221,8 +232,7 @@ export default function VendorDashboard() {
         service_booked: manualServices.join(', '),
         photo_url: photoUrl,
         position: nextPos,
-        token_number: String(nextPos),
-        is_vip: false
+        token_number: String(nextPos)
       }]);
       
       await reindexQueue();
@@ -446,13 +456,10 @@ export default function VendorDashboard() {
                               {queue.map((customer, idx) => (
                                 <Draggable key={customer.id} draggableId={customer.id.toString()} index={idx}>
                                   {(provided, snapshot) => (
-                                    <motion.div
-                                      initial={{ opacity: 0, x: -20 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      exit={{ opacity: 0, scale: 0.9 }}
+                                    <div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
-                                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white transition-colors rounded-xl border shadow-sm gap-4 ${snapshot.isDragging ? 'shadow-lg border-blue-400 bg-blue-50/50 scale-[1.02]' : 'border-slate-100 hover:bg-slate-50'}`}
+                                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white transition-colors rounded-xl border shadow-sm gap-4 ${snapshot.isDragging ? 'shadow-lg border-blue-400 bg-blue-50/50 scale-[1.02] z-50' : 'border-slate-100 hover:bg-slate-50'}`}
                                       style={provided.draggableProps.style}
                                     >
                                       <div className="flex items-center gap-4">
@@ -476,7 +483,7 @@ export default function VendorDashboard() {
                                         <button onClick={() => handleRing(customer.id, customer.strikes)} className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm" title="Ring"><BellRing className="w-4 h-4" /></button>
                                         <button onClick={() => handleDelete(customer.id)} className="p-2.5 bg-red-50 border border-red-100 text-red-600 rounded-xl hover:bg-red-100 transition-colors shadow-sm" title="Remove"><Trash2 className="w-4 h-4" /></button>
                                       </div>
-                                    </motion.div>
+                                    </div>
                                   )}
                                 </Draggable>
                               ))}
