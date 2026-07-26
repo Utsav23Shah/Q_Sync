@@ -356,11 +356,7 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
           </button>
         </nav>
         
-        <div className="p-4 border-t border-slate-100 space-y-2">
-          <button onClick={handleLogout} className="flex items-center justify-center w-full gap-2 py-3 text-slate-600 font-bold border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors">Switch Account</button>
-          <button onClick={handleLogout} className="flex items-center justify-center w-full gap-2 py-3 text-red-600 font-bold bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
+        <div className="p-4 border-t border-slate-100 hidden">
         </div>
       </aside>
 
@@ -646,7 +642,14 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
                  <div className="space-y-8">
                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
                      <QRCode value={`https://frontend-lovat-seven-87.vercel.app/v/${vendorData.id}`} size={150} className="mb-4" />
-                     <p className="text-sm font-medium text-slate-500 text-center">Customers scan this to join.</p>
+                     <p className="text-sm font-medium text-slate-500 text-center mb-6">Customers scan this to join.</p>
+                     
+                     <div className="w-full space-y-2 pt-6 border-t border-slate-100">
+                       <button onClick={handleLogout} className="flex items-center justify-center w-full gap-2 py-3 text-slate-600 font-bold border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors">Switch Account</button>
+                       <button onClick={handleLogout} className="flex items-center justify-center w-full gap-2 py-3 text-red-600 font-bold bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
+                         <LogOut className="w-4 h-4" /> Logout
+                       </button>
+                     </div>
                    </div>
                  </div>
                  <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">

@@ -212,7 +212,7 @@ export default function CustomerVendorPage() {
     } catch (err) {
       console.error(err);
       alert("Failed to join queue. Error: " + err.message);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
