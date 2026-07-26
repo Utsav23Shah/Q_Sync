@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Users, CheckCircle, SkipForward, Clock, LogOut, UserPlus, QrCode, X, ArrowRight, BellRing, Trash2, History, Settings, Plus, Scissors, Camera, Loader2, Star, Shield, BarChart3, Sparkles, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'react-qr-code';
-import Webcam from 'react-webcam';
+
 import { supabase } from '../../lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -31,7 +31,7 @@ export default function VendorDashboard() {
   const [manualServices, setManualServices] = useState([]);
   const [manualPhoto, setManualPhoto] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const webcamRef = useRef(null);
+
   const [isAdding, setIsAdding] = useState(false);
 
   // Profile Edit State
@@ -188,21 +188,18 @@ export default function VendorDashboard() {
     fetchQueue(vendorData.id);
   };
 
-  const capturePhoto = () => {
-    if (!webcamRef.current) {
-      alert("Camera is not available. You can continue without a photo.");
-      setManualPhoto(null);
-      setIsCapturing(false);
-      return;
-    }
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (imageSrc) {
-      setManualPhoto(imageSrc);
+  const handleNativeManualCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setManualPhoto(reader.result);
+        setIsCapturing(false);
+      };
+      reader.readAsDataURL(file);
     } else {
-      alert("Failed to capture photo. You can continue without one.");
-      setManualPhoto(null);
+      setIsCapturing(false);
     }
-    setIsCapturing(false);
   };
 
   const handleManualAdd = async (e) => {
@@ -705,6 +702,49 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
                   </div>
                 </div>
                 
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Live Photo (Optional)</label>
+                  {!manualPhoto && !isCapturing && (
+                    <button type="button" onClick={() => setIsCapturing(true)} className="w-full h-32 border-2 border-dashed border-slate-300 bg-slate-50 rounded-xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-100 hover:border-slate-400 transition-all active:scale-[0.98]">
+                      <Camera className="w-8 h-8 mb-2 text-slate-400" />
+                      <span className="font-bold text-sm">Take customer photo</span>
+                    </button>
+                  )}
+                  {isCapturing && (
+                    <div className="relative rounded-xl overflow-hidden bg-white z-10 shadow-lg border border-slate-200 p-6 flex flex-col items-center justify-center">
+                      <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                         <Camera className="w-8 h-8" />
+                      </div>
+                      <h3 className="font-bold text-slate-900 mb-2">Take a Photo</h3>
+                      <p className="text-sm text-slate-500 mb-6 text-center">Your device camera will open securely.</p>
+                      
+                      <div className="relative w-full">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          capture="environment" 
+                          onChange={handleNativeManualCapture}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        />
+                        <button type="button" className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-md pointer-events-none">
+                          Open Camera
+                        </button>
+                      </div>
+                      
+                      <button type="button" onClick={() => setIsCapturing(false)} className="mt-4 px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {manualPhoto && (
+                    <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm group">
+                      <img src={manualPhoto} alt="Customer" className="w-full object-cover h-40 transition-transform group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button type="button" onClick={() => {setManualPhoto(null); setIsCapturing(true);}} className="px-5 py-2 bg-white/90 backdrop-blur-md text-slate-900 font-bold rounded-xl text-sm shadow-lg hover:scale-105 transition-all">Retake</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button type="submit" disabled={isAdding} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl mt-4 flex items-center justify-center">
                   {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add to Queue'}
                 </button>
