@@ -468,7 +468,7 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
                                       style={provided.draggableProps.style}
                                     >
                                       <div className="flex items-center gap-4">
-                                        <div {...provided.dragHandleProps} className="p-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing">
+                                        <div {...provided.dragHandleProps} style={{ touchAction: 'none' }} className="p-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing">
                                           <GripVertical className="w-5 h-5" />
                                         </div>
                                         <div className="w-10 h-10 font-black rounded-xl flex items-center justify-center shadow-inner bg-blue-50 border border-blue-100 text-blue-700">{customer.position}</div>
