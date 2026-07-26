@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, CheckCircle, SkipForward, Clock, LogOut, UserPlus, QrCode, X, ArrowRight, BellRing, Trash2, History, Settings, Plus, Scissors, Camera, Loader2, Star, Shield, Crown, BarChart3, Sparkles } from 'lucide-react';
+import { Users, CheckCircle, SkipForward, Clock, LogOut, UserPlus, QrCode, X, ArrowRight, BellRing, Trash2, History, Settings, Plus, Scissors, Camera, Loader2, Star, Shield, BarChart3, Sparkles, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import Webcam from 'react-webcam';
 import { supabase } from '../../lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
@@ -29,7 +30,6 @@ export default function VendorDashboard() {
   const [manualPhone, setManualPhone] = useState('');
   const [manualServices, setManualServices] = useState([]);
   const [manualPhoto, setManualPhoto] = useState(null);
-  const [isVIP, setIsVIP] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const webcamRef = useRef(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -158,22 +158,35 @@ export default function VendorDashboard() {
   };
 
   async function reindexQueue() {
-    const { data } = await supabase.from('queue_tokens').select('id, is_vip, status, position').eq('vendor_id', vendorData.id).eq('is_scheduled', false).in('status', ['WAITING', 'SERVING']).order('position', { ascending: true });
+    const { data } = await supabase.from('queue_tokens').select('id, status, position').eq('vendor_id', vendorData.id).eq('is_scheduled', false).in('status', ['WAITING', 'SERVING']).order('position', { ascending: true });
     if (data) {
-      const serving = data.filter(d => d.status === 'SERVING');
-      const waiting = data.filter(d => d.status === 'WAITING');
-      waiting.sort((a, b) => {
-        if(a.is_vip && !b.is_vip) return -1;
-        if(!a.is_vip && b.is_vip) return 1;
-        return a.position - b.position;
-      });
-      const sorted = [...serving, ...waiting];
-      for (let i = 0; i < sorted.length; i++) {
-        await supabase.from('queue_tokens').update({ position: i + 1 }).eq('id', sorted[i].id);
+      for (let i = 0; i < data.length; i++) {
+        await supabase.from('queue_tokens').update({ position: i + 1, token_number: String(i + 1) }).eq('id', data[i].id);
       }
     }
     fetchQueue(vendorData.id);
   }
+
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+    const sourceIndex = result.source.index;
+    const destIndex = result.destination.index;
+    if (sourceIndex === destIndex) return;
+
+    // Optimistically update UI
+    const newQueue = Array.from(queue);
+    const [movedItem] = newQueue.splice(sourceIndex, 1);
+    newQueue.splice(destIndex, 0, movedItem);
+    setQueue(newQueue);
+
+    // Update DB
+    const allTokens = currentServing ? [currentServing, ...newQueue] : [...newQueue];
+    for (let i = 0; i < allTokens.length; i++) {
+      await supabase.from('queue_tokens').update({ position: i + 1, token_number: String(i + 1) }).eq('id', allTokens[i].id);
+    }
+    // No need to fetch immediately since we optimistically updated, but good for sync
+    fetchQueue(vendorData.id);
+  };
 
   const capturePhoto = () => {
     const imageSrc = webcamRef.current.getScreenshot();
@@ -209,12 +222,12 @@ export default function VendorDashboard() {
         photo_url: photoUrl,
         position: nextPos,
         token_number: String(nextPos),
-        is_vip: isVIP
+        is_vip: false
       }]);
       
       await reindexQueue();
       
-      setManualName(''); setManualPhone(''); setManualPhoto(null); setIsVIP(false);
+      setManualName(''); setManualPhone(''); setManualPhoto(null);
       setShowManualEntry(false);
     } catch(err) {
       alert("Error adding manually: " + err.message);
@@ -397,7 +410,7 @@ export default function VendorDashboard() {
                         <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl font-bold border-4 border-white">#{currentServing.token_number || currentServing.position}</div>
                       )}
                       <h4 className="text-xl font-bold text-slate-900 mb-1 flex items-center justify-center gap-2">
-                        {currentServing.is_vip && <Crown className="w-5 h-5 text-amber-500" />} {currentServing.customer_name}
+                        {currentServing.customer_name}
                       </h4>
                       <p className="text-sm text-blue-600 font-medium mb-1">Service: {currentServing.service_booked || 'None'}</p>
                       <p className="text-xs text-slate-500 mb-6">Phone: {currentServing.customer_phone || 'N/A'}</p>
@@ -425,32 +438,54 @@ export default function VendorDashboard() {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 h-full min-h-[400px]">
                   <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">Waiting List</h3>
                   {queue.length > 0 ? (
-                    <div className="space-y-3">
-                      <AnimatePresence>
-                        {queue.map((customer, idx) => (
-                          <motion.div key={customer.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: idx * 0.05 }} className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white transition-colors rounded-xl border shadow-sm gap-4 ${customer.is_vip ? 'border-amber-300 bg-amber-50/30' : 'border-slate-100 hover:bg-slate-50'}`}>
-                            <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 font-black rounded-xl flex items-center justify-center shadow-inner ${customer.is_vip ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-blue-50 border border-blue-100 text-blue-700'}`}>{customer.position}</div>
-                              {customer.photo_url ? (
-                                 <img src={customer.photo_url} alt="Cust" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
-                              ) : (
-                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 border-2 border-white shadow-sm"><UserPlus className="w-5 h-5"/></div>
-                              )}
-                              <div>
-                                <p className="font-bold text-slate-900 flex items-center gap-1">
-                                  {customer.customer_name} {customer.is_vip && <Crown className="w-4 h-4 text-amber-500" />}
-                                </p>
-                                <p className="text-xs text-slate-500 font-medium">{customer.service_booked || 'General'} <span className="mx-1">•</span> <span className="text-blue-600 font-bold">#{customer.token_number || customer.position}</span></p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => handleRing(customer.id, customer.strikes)} className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm" title="Ring"><BellRing className="w-4 h-4" /></button>
-                              <button onClick={() => handleDelete(customer.id)} className="p-2.5 bg-red-50 border border-red-100 text-red-600 rounded-xl hover:bg-red-100 transition-colors shadow-sm" title="Remove"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
+                    <DragDropContext onDragEnd={handleDragEnd}>
+                      <Droppable droppableId="waiting-list">
+                        {(provided) => (
+                          <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
+                            <AnimatePresence>
+                              {queue.map((customer, idx) => (
+                                <Draggable key={customer.id} draggableId={customer.id.toString()} index={idx}>
+                                  {(provided, snapshot) => (
+                                    <motion.div
+                                      initial={{ opacity: 0, x: -20 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      exit={{ opacity: 0, scale: 0.9 }}
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white transition-colors rounded-xl border shadow-sm gap-4 ${snapshot.isDragging ? 'shadow-lg border-blue-400 bg-blue-50/50 scale-[1.02]' : 'border-slate-100 hover:bg-slate-50'}`}
+                                      style={provided.draggableProps.style}
+                                    >
+                                      <div className="flex items-center gap-4">
+                                        <div {...provided.dragHandleProps} className="p-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing">
+                                          <GripVertical className="w-5 h-5" />
+                                        </div>
+                                        <div className="w-10 h-10 font-black rounded-xl flex items-center justify-center shadow-inner bg-blue-50 border border-blue-100 text-blue-700">{customer.position}</div>
+                                        {customer.photo_url ? (
+                                           <img src={customer.photo_url} alt="Cust" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                                        ) : (
+                                           <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 border-2 border-white shadow-sm"><UserPlus className="w-5 h-5"/></div>
+                                        )}
+                                        <div>
+                                          <p className="font-bold text-slate-900 flex items-center gap-1">
+                                            {customer.customer_name}
+                                          </p>
+                                          <p className="text-xs text-slate-500 font-medium">{customer.service_booked || 'General'} <span className="mx-1">•</span> <span className="text-blue-600 font-bold">#{customer.token_number || customer.position}</span></p>
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => handleRing(customer.id, customer.strikes)} className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm" title="Ring"><BellRing className="w-4 h-4" /></button>
+                                        <button onClick={() => handleDelete(customer.id)} className="p-2.5 bg-red-50 border border-red-100 text-red-600 rounded-xl hover:bg-red-100 transition-colors shadow-sm" title="Remove"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </Draggable>
+                              ))}
+                            </AnimatePresence>
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
                   ) : (<div className="text-center py-16"><p className="text-slate-500 font-medium">The queue is empty.</p></div>)}
                 </div>
               </div>
@@ -582,7 +617,7 @@ export default function VendorDashboard() {
                        <tr key={h.id} className="border-b border-slate-100 hover:bg-slate-50">
                          <td className="p-4 font-bold text-slate-400">{history.length - idx}</td>
                          <td className="p-4 font-bold text-slate-900">#{h.token_number || h.position}</td>
-                         <td className="p-4 font-medium text-slate-700">{h.customer_name} {h.is_vip && <Crown className="w-4 h-4 text-amber-500 inline ml-1"/>}</td>
+                         <td className="p-4 font-medium text-slate-700">{h.customer_name}</td>
                          <td className="p-4 text-blue-600 font-medium truncate max-w-[150px]">{h.service_booked || '-'}</td>
                          <td className="p-4 text-slate-500 text-sm">{new Date(h.completed_at).toLocaleTimeString()}</td>
                        </tr>
@@ -635,11 +670,7 @@ export default function VendorDashboard() {
                   <input type="tel" value={manualPhone} onChange={e=>setManualPhone(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
                 </div>
                 
-                {/* VIP Checkbox */}
-                <label className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer">
-                   <input type="checkbox" checked={isVIP} onChange={(e) => setIsVIP(e.target.checked)} className="w-5 h-5 rounded border-amber-300 text-amber-500 focus:ring-amber-500" />
-                   <span className="font-bold text-amber-800 flex items-center gap-2"><Crown className="w-4 h-4"/> Mark as Priority VIP</span>
-                </label>
+
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Service Booked</label>

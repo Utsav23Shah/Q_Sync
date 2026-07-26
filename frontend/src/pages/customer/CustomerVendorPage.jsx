@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Webcam from 'react-webcam';
-import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Crown } from 'lucide-react';
+import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Navigation } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -33,6 +33,7 @@ export default function CustomerVendorPage() {
   const [ticket, setTicket] = useState(null);
   const [liveQueue, setLiveQueue] = useState([]);
   const [eta, setEta] = useState(0);
+  const [travelTimeMins, setTravelTimeMins] = useState(null);
 
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -71,6 +72,25 @@ export default function CustomerVendorPage() {
           fetchLiveQueue();
         })
         .subscribe();
+
+      // Ask for location and fetch travel time
+      if (vendorData?.latitude && vendorData?.longitude) {
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(async (position) => {
+            try {
+              const { latitude, longitude } = position.coords;
+              const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${vendorData.longitude},${vendorData.latitude}?overview=false`);
+              const osrmData = await res.json();
+              if (osrmData.routes && osrmData.routes.length > 0) {
+                setTravelTimeMins(Math.ceil(osrmData.routes[0].duration / 60));
+              }
+            } catch (err) {
+              console.log("Could not calculate travel time", err);
+            }
+          });
+        }
+      }
+
       return () => { supabase.removeChannel(channel); clearInterval(poller); }
     }
   }, [ticket?.id, vendorId]);
@@ -350,6 +370,26 @@ export default function CustomerVendorPage() {
                     </div>
                   </div>
 
+                  {travelTimeMins !== null && (
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 rounded-2xl border ${eta > travelTimeMins + 5 ? 'bg-indigo-50 border-indigo-200 shadow-inner' : 'bg-rose-50 border-rose-200 shadow-rose-500/20 shadow-lg'} relative overflow-hidden`}>
+                       <div className="flex items-start gap-4 relative z-10">
+                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${eta > travelTimeMins + 5 ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600 animate-pulse'}`}>
+                           <Navigation className="w-6 h-6" />
+                         </div>
+                         <div className="text-left">
+                           <h4 className={`font-bold text-lg ${eta > travelTimeMins + 5 ? 'text-indigo-900' : 'text-rose-900'}`}>Smart Departure</h4>
+                           <p className={`text-sm font-medium mt-1 ${eta > travelTimeMins + 5 ? 'text-indigo-700' : 'text-rose-700'}`}>
+                             {eta > travelTimeMins + 5 ? (
+                               <>Leave in <strong>{eta - travelTimeMins - 5} mins</strong> to arrive right on time (Drive is ~{travelTimeMins}m).</>
+                             ) : (
+                               <>Leave <strong>immediately!</strong> The drive takes ~{travelTimeMins}m.</>
+                             )}
+                           </p>
+                         </div>
+                       </div>
+                    </motion.div>
+                  )}
+
                   <div className="space-y-3 pt-4 border-t border-slate-200/50">
                     <button onClick={handlePushBack} disabled={loading} className="w-full py-3 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm">
                       <ArrowDownCircle className="w-5 h-5" /> Push Back Position
@@ -405,7 +445,6 @@ export default function CustomerVendorPage() {
                       <div>
                         <p className="font-bold text-slate-900 flex items-center gap-1">
                           {q.id === ticket.id ? 'You' : q.customer_name}
-                          {q.is_vip && <Crown className="w-4 h-4 text-amber-500" />}
                         </p>
                         <p className="text-xs text-slate-500">{q.service_booked}</p>
                       </div>
