@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, CheckCircle, SkipForward, Clock, LogOut, UserPlus, QrCode, X, ArrowRight, BellRing, Trash2, History, Settings, Plus, Scissors, Camera, Loader2, Star, Shield, BarChart3, Sparkles, GripVertical } from 'lucide-react';
+import { Users, CheckCircle, SkipForward, Clock, LogOut, UserPlus, QrCode, X, ArrowRight, BellRing, Trash2, History, Settings, Plus, Scissors, Camera, Loader2, Star, Shield, BarChart3, Sparkles, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'react-qr-code';
-import Webcam from 'react-webcam';
 import { supabase } from '../../lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -31,7 +30,6 @@ export default function VendorDashboard() {
   const [manualServices, setManualServices] = useState([]);
   const [manualPhoto, setManualPhoto] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const webcamRef = useRef(null);
   const [isAdding, setIsAdding] = useState(false);
 
   // Profile Edit State
@@ -188,11 +186,18 @@ export default function VendorDashboard() {
     fetchQueue(vendorData.id);
   };
 
-  const capturePhoto = () => {
-    if (!webcamRef.current) return;
-    const imageSrc = webcamRef.current.getScreenshot();
-    setManualPhoto(imageSrc);
-    setIsCapturing(false);
+  const handleNativeManualCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setManualPhoto(reader.result);
+        setIsCapturing(false);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setIsCapturing(false);
+    }
   };
 
   const handleManualAdd = async (e) => {
@@ -457,6 +462,14 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
                                         <div {...provided.dragHandleProps} style={{ touchAction: 'none' }} className="p-2 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing">
                                           <GripVertical className="w-5 h-5" />
                                         </div>
+                                        <div className="flex flex-col gap-1 mr-2">
+                                          <button onClick={() => handleManualMove(customer.id, -1)} className="p-1 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded">
+                                            <ArrowUp className="w-3 h-3" />
+                                          </button>
+                                          <button onClick={() => handleManualMove(customer.id, 1)} className="p-1 bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 rounded">
+                                            <ArrowDown className="w-3 h-3" />
+                                          </button>
+                                        </div>
                                         <div className="w-10 h-10 font-black rounded-xl flex items-center justify-center shadow-inner bg-blue-50 border border-blue-100 text-blue-700">{customer.position}</div>
                                         {customer.photo_url ? (
                                            <img src={customer.photo_url} alt="Cust" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
@@ -704,12 +717,27 @@ To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
                     </button>
                   )}
                   {isCapturing && (
-                    <div className="relative rounded-2xl overflow-hidden bg-black z-10 shadow-lg border border-slate-800">
-                      <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "environment" }} className="w-full object-cover" />
-                      <button type="button" onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all">
-                        Capture
-                      </button>
-                      <button type="button" onClick={() => setIsCapturing(false)} className="absolute bottom-4 right-4 px-4 py-2 bg-red-500 text-white font-bold text-xs rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all">
+                    <div className="relative rounded-xl overflow-hidden bg-white z-10 shadow-lg border border-slate-200 p-6 flex flex-col items-center justify-center">
+                      <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                         <Camera className="w-8 h-8" />
+                      </div>
+                      <h3 className="font-bold text-slate-900 mb-2">Take a Photo</h3>
+                      <p className="text-sm text-slate-500 mb-6 text-center">Your device camera will open securely.</p>
+                      
+                      <div className="relative w-full">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          capture="environment" 
+                          onChange={handleNativeManualCapture}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        />
+                        <button type="button" className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-md pointer-events-none">
+                          Open Camera
+                        </button>
+                      </div>
+                      
+                      <button type="button" onClick={() => setIsCapturing(false)} className="mt-4 px-4 py-2 text-slate-500 font-bold text-sm hover:text-slate-700 transition-colors">
                         Cancel
                       </button>
                     </div>
