@@ -290,10 +290,12 @@ export default function VendorDashboard() {
           </div>
         )}
 
-        {/* TAB 1: LIVE QUEUE */}
-        {activeTab === 'LIVE_QUEUE' && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}}>
-            <header className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        {/* TAB CONTENT */}
+        <AnimatePresence mode="wait">
+          {/* TAB 1: LIVE QUEUE */}
+          {activeTab === 'LIVE_QUEUE' && (
+            <motion.div key="LIVE_QUEUE" initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} transition={{ duration: 0.2 }}>
+              <header className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
                 <h2 className="text-3xl font-extrabold text-slate-900">Live Queue</h2>
                 <p className="text-slate-500 mt-1 font-medium">Manage your active customers.</p>
@@ -352,26 +354,28 @@ export default function VendorDashboard() {
                   <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">Waiting List</h3>
                   {queue.length > 0 ? (
                     <div className="space-y-3">
-                      {queue.map((customer) => (
-                        <div key={customer.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg flex items-center justify-center">{customer.position}</div>
-                            {customer.photo_url ? (
-                               <img src={customer.photo_url} alt="Cust" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                            ) : (
-                               <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-400"><UserPlus className="w-4 h-4"/></div>
-                            )}
-                            <div>
-                              <p className="font-bold text-slate-900">{customer.customer_name}</p>
-                              <p className="text-xs text-slate-500 font-medium">{customer.service_booked || 'General'} • #{customer.token_number || customer.position}</p>
+                      <AnimatePresence>
+                        {queue.map((customer, idx) => (
+                          <motion.div key={customer.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: idx * 0.05 }} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors rounded-xl border border-slate-100 shadow-sm gap-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 bg-blue-50 border border-blue-100 text-blue-700 font-black rounded-xl flex items-center justify-center shadow-inner">{customer.position}</div>
+                              {customer.photo_url ? (
+                                 <img src={customer.photo_url} alt="Cust" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                              ) : (
+                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 border-2 border-white shadow-sm"><UserPlus className="w-5 h-5"/></div>
+                              )}
+                              <div>
+                                <p className="font-bold text-slate-900">{customer.customer_name}</p>
+                                <p className="text-xs text-slate-500 font-medium">{customer.service_booked || 'General'} <span className="mx-1">•</span> <span className="text-blue-600 font-bold">#{customer.token_number || customer.position}</span></p>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => handleRing(customer.id, customer.strikes)} className="p-2 bg-white border border-slate-200 text-indigo-600 rounded-lg hover:bg-slate-100" title="Ring"><BellRing className="w-4 h-4" /></button>
-                            <button onClick={() => handleDelete(customer.id)} className="p-2 bg-white border border-slate-200 text-red-600 rounded-lg hover:bg-red-50" title="Remove"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        </div>
-                      ))}
+                            <div className="flex gap-2">
+                              <button onClick={() => handleRing(customer.id, customer.strikes)} className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm" title="Ring"><BellRing className="w-4 h-4" /></button>
+                              <button onClick={() => handleDelete(customer.id)} className="p-2.5 bg-red-50 border border-red-100 text-red-600 rounded-xl hover:bg-red-100 transition-colors shadow-sm" title="Remove"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   ) : (<div className="text-center py-16"><p className="text-slate-500 font-medium">The queue is empty.</p></div>)}
                 </div>
@@ -381,9 +385,9 @@ export default function VendorDashboard() {
         )}
 
         {/* TAB 2: HISTORY */}
-        {activeTab === 'HISTORY' && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}}>
-            <header className="mb-8 flex justify-between items-end">
+          {activeTab === 'HISTORY' && (
+            <motion.div key="HISTORY" initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} transition={{ duration: 0.2 }}>
+              <header className="mb-8 flex justify-between items-end">
               <div>
                 <h2 className="text-3xl font-extrabold text-slate-900">History Register</h2>
                 <p className="text-slate-500 mt-1 font-medium">Record of all completed services.</p>
@@ -424,9 +428,9 @@ export default function VendorDashboard() {
         )}
 
         {/* TAB 3: PROFILE & SERVICES */}
-        {activeTab === 'PROFILE' && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="space-y-8">
+          {activeTab === 'PROFILE' && (
+            <motion.div key="PROFILE" initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} transition={{ duration: 0.2 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="space-y-8">
               {/* Profile Details */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
                 <h3 className="text-xl font-bold text-slate-900 mb-6">Business Profile</h3>
@@ -483,9 +487,9 @@ export default function VendorDashboard() {
           </motion.div>
         )}
         {/* TAB 4: FEEDBACK */}
-        {activeTab === 'FEEDBACK' && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}}>
-            <header className="mb-8">
+          {activeTab === 'FEEDBACK' && (
+            <motion.div key="FEEDBACK" initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} transition={{ duration: 0.2 }}>
+              <header className="mb-8">
               <h2 className="text-3xl font-extrabold text-slate-900">Customer Feedback</h2>
               <p className="text-slate-500 mt-1 font-medium">What your customers are saying about you.</p>
             </header>
@@ -512,14 +516,15 @@ export default function VendorDashboard() {
             </div>
           </motion.div>
         )}
+        </AnimatePresence>
       </main>
 
       {/* Manual Entry Modal */}
       <AnimatePresence>
         {showManualEntry && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}} className="bg-white rounded-2xl p-8 max-w-sm w-full relative my-8">
-              <button onClick={() => setShowManualEntry(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X className="w-5 h-5"/></button>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div initial={{scale:0.9, y: 20}} animate={{scale:1, y: 0}} exit={{scale:0.9, y: 20}} transition={{ type: "spring", duration: 0.4 }} className="bg-white/90 backdrop-blur-xl border border-white rounded-3xl shadow-2xl p-8 max-w-sm w-full relative my-8">
+              <button onClick={() => setShowManualEntry(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-full transition-colors"><X className="w-5 h-5"/></button>
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Manual Entry</h2>
               <form onSubmit={handleManualAdd} className="space-y-4">
                 <div>
