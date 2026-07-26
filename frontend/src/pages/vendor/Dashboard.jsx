@@ -263,7 +263,13 @@ export default function VendorDashboard() {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        setAiInsights("VITE_GEMINI_API_KEY is missing in your .env.local file. Please add it to enable real AI insights! (Mocking response for now: Customers generally enjoy the service but waiting times during peak hours are a common pain point.)");
+        setAiInsights(`📊 AI Analysis Summary (Demo Mode)
+
+✅ Strengths: Customers appreciate the service quality and friendly staff.
+⚠️ Areas to Improve: Waiting times during peak hours could be reduced.
+💡 Suggestion: Consider adding more staff during 12-2 PM and 5-7 PM rush hours.
+
+To enable real AI insights, add VITE_GEMINI_API_KEY to your .env.local file.`);
         setAiLoading(false);
         return;
       }
@@ -403,7 +409,7 @@ export default function VendorDashboard() {
 
             <div className="mb-6">
               <button onClick={() => setShowManualEntry(true)} className="py-3 px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-sm flex items-center gap-2">
-                <UserPlus className="w-5 h-5" /> Manual Entry / VIP
+                <UserPlus className="w-5 h-5" /> Add Customer
               </button>
             </div>
 
@@ -452,7 +458,6 @@ export default function VendorDashboard() {
                       <Droppable droppableId="waiting-list">
                         {(provided) => (
                           <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
-                            <AnimatePresence>
                               {queue.map((customer, idx) => (
                                 <Draggable key={customer.id} draggableId={customer.id.toString()} index={idx}>
                                   {(provided, snapshot) => (
@@ -487,7 +492,6 @@ export default function VendorDashboard() {
                                   )}
                                 </Draggable>
                               ))}
-                            </AnimatePresence>
                             {provided.placeholder}
                           </div>
                         )}

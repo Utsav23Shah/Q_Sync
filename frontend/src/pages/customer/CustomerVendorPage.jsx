@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import Webcam from 'react-webcam';
 import { Camera, CheckCircle, Loader2, Users, MapPin, Clock, ArrowDownCircle, Star, MessageSquareHeart, Navigation } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -27,7 +26,10 @@ export default function CustomerVendorPage() {
   const [photo, setPhoto] = useState(null);
   const [scheduleTime, setScheduleTime] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
-  const webcamRef = useRef(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -72,28 +74,36 @@ export default function CustomerVendorPage() {
           fetchLiveQueue();
         })
         .subscribe();
-
-      // Ask for location and fetch travel time
-      if (vendorData?.latitude && vendorData?.longitude) {
-        if ("geolocation" in navigator) {
-          navigator.geolocation.getCurrentPosition(async (position) => {
-            try {
-              const { latitude, longitude } = position.coords;
-              const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${vendorData.longitude},${vendorData.latitude}?overview=false`);
-              const osrmData = await res.json();
-              if (osrmData.routes && osrmData.routes.length > 0) {
-                setTravelTimeMins(Math.ceil(osrmData.routes[0].duration / 60));
-              }
-            } catch (err) {
-              console.log("Could not calculate travel time", err);
-            }
-          });
-        }
-      }
-
       return () => { supabase.removeChannel(channel); clearInterval(poller); }
     }
   }, [ticket?.id, vendorId]);
+
+  // Separate effect for travel time calculation - depends on vendorData AND ticket
+  useEffect(() => {
+    if (!ticket || !vendorData?.latitude || !vendorData?.longitude) return;
+    if (!("geolocation" in navigator)) return;
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${vendorData.longitude},${vendorData.latitude}?overview=false`
+          );
+          const osrmData = await res.json();
+          if (osrmData.routes && osrmData.routes.length > 0) {
+            setTravelTimeMins(Math.ceil(osrmData.routes[0].duration / 60));
+          }
+        } catch (err) {
+          console.log("Could not calculate travel time", err);
+        }
+      },
+      (err) => {
+        console.log("Geolocation denied or unavailable:", err.message);
+      },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }, [ticket?.id, vendorData?.latitude, vendorData?.longitude]);
   
   const prevStrikes = useRef(0);
   useEffect(() => {
@@ -123,9 +133,8 @@ export default function CustomerVendorPage() {
       const { data: myTicketData } = await supabase.from('queue_tokens').select('*').eq('id', ticket.id).single();
       if (myTicketData) {
         setTicket(myTicketData);
-        // Calculate ETA
         if (!myTicketData.is_scheduled && myTicketData.status !== 'COMPLETED') {
-          let etaMins = data.filter(q => !q.is_scheduled && q.position < myTicketData.position).reduce((acc, q) => {
+          let etaMins = data ? data.filter(q => !q.is_scheduled && q.position < myTicketData.position).reduce((acc, q) => {
             const booked = q.service_booked ? q.service_booked.split(', ') : [];
             let rowMins = 0;
             booked.forEach(b => {
@@ -134,29 +143,79 @@ export default function CustomerVendorPage() {
             });
             if(booked.length === 0) rowMins = 15;
             return acc + rowMins;
-          }, 0);
+          }, 0) : 0;
           setEta(etaMins);
         }
       }
     }
   }
 
-  const capturePhoto = () => {
-    if (!webcamRef.current) {
-      alert("Camera is not available. You can continue without a photo.");
-      setPhoto(null);
+  // --- CAMERA using native getUserMedia (works on ALL browsers, HTTPS, mobile) ---
+  const startCamera = async () => {
+    setIsCapturing(true);
+    setCameraReady(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
+      streamRef.current = stream;
+      // Wait for videoRef to be available in DOM
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play();
+            setCameraReady(true);
+          };
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Camera error:', err);
+      alert('Camera access denied or not available. You can join the queue without a photo.');
       setIsCapturing(false);
-      return;
     }
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (imageSrc) {
-      setPhoto(imageSrc);
-    } else {
-      alert("Failed to capture photo. You can continue without one.");
-      setPhoto(null);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    // Mirror the image
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    setPhoto(dataUrl);
+    // Stop the camera stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     setIsCapturing(false);
+    setCameraReady(false);
   };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCapturing(false);
+    setCameraReady(false);
+  };
+
+  // Clean up camera on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const handleJoinQueue = async (e) => {
     e.preventDefault();
@@ -177,7 +236,7 @@ export default function CustomerVendorPage() {
         if (!uploadErr) {
           photoUrl = supabase.storage.from('live_photos').getPublicUrl(fileName).data.publicUrl;
         } else {
-          console.error("Photo upload error:", uploadErr);
+          console.error("Photo upload error (continuing without photo):", uploadErr);
         }
       }
 
@@ -319,7 +378,6 @@ export default function CustomerVendorPage() {
 
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background Decorative Blobs */}
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-600/20 to-transparent blur-3xl -z-10"></div>
         <div className="absolute top-1/4 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -z-10"></div>
 
@@ -384,18 +442,18 @@ export default function CustomerVendorPage() {
                   </div>
 
                   {travelTimeMins !== null && (
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 rounded-2xl border ${eta > travelTimeMins + 5 ? 'bg-indigo-50 border-indigo-200 shadow-inner' : 'bg-rose-50 border-rose-200 shadow-rose-500/20 shadow-lg'} relative overflow-hidden`}>
-                       <div className="flex items-start gap-4 relative z-10">
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 rounded-2xl border text-left ${eta > travelTimeMins + 5 ? 'bg-indigo-50 border-indigo-200' : 'bg-rose-50 border-rose-200 shadow-lg shadow-rose-500/10'}`}>
+                       <div className="flex items-start gap-4">
                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${eta > travelTimeMins + 5 ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600 animate-pulse'}`}>
                            <Navigation className="w-6 h-6" />
                          </div>
-                         <div className="text-left">
+                         <div>
                            <h4 className={`font-bold text-lg ${eta > travelTimeMins + 5 ? 'text-indigo-900' : 'text-rose-900'}`}>Smart Departure</h4>
                            <p className={`text-sm font-medium mt-1 ${eta > travelTimeMins + 5 ? 'text-indigo-700' : 'text-rose-700'}`}>
                              {eta > travelTimeMins + 5 ? (
-                               <>Leave in <strong>{eta - travelTimeMins - 5} mins</strong> to arrive right on time (Drive is ~{travelTimeMins}m).</>
+                               <>Leave in <strong>{eta - travelTimeMins - 5} mins</strong> to arrive right on time. Drive is ~{travelTimeMins}m.</>
                              ) : (
-                               <>Leave <strong>immediately!</strong> The drive takes ~{travelTimeMins}m.</>
+                               <>Leave <strong>now!</strong> The drive takes ~{travelTimeMins}m and your turn is in ~{eta}m.</>
                              )}
                            </p>
                          </div>
@@ -449,22 +507,20 @@ export default function CustomerVendorPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-lg border border-white p-6">
               <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600"/> Live Queue Tracker</h3>
               <div className="space-y-3">
-                <AnimatePresence>
-                  {liveQueue.map((q, idx) => (
-                    <motion.div key={q.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: idx * 0.05 }} className={`flex items-center gap-4 p-3 rounded-2xl border transition-all ${q.id === ticket.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white/50 border-slate-100 hover:bg-white hover:shadow-sm'}`}>
-                      <div className={`w-10 h-10 font-bold rounded-xl flex items-center justify-center ${q.id === ticket.id ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'bg-slate-100 text-slate-700 shadow-inner'}`}>
-                        {q.position}
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 flex items-center gap-1">
-                          {q.id === ticket.id ? 'You' : q.customer_name}
-                        </p>
-                        <p className="text-xs text-slate-500">{q.service_booked}</p>
-                      </div>
-                      {q.status === 'SERVING' && <span className="ml-auto text-[10px] font-black text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">Serving</span>}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
+                {liveQueue.map((q, idx) => (
+                  <div key={q.id} className={`flex items-center gap-4 p-3 rounded-2xl border transition-all ${q.id === ticket.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white/50 border-slate-100 hover:bg-white hover:shadow-sm'}`}>
+                    <div className={`w-10 h-10 font-bold rounded-xl flex items-center justify-center ${q.id === ticket.id ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'bg-slate-100 text-slate-700 shadow-inner'}`}>
+                      {q.position}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900">
+                        {q.id === ticket.id ? 'You' : q.customer_name}
+                      </p>
+                      <p className="text-xs text-slate-500">{q.service_booked}</p>
+                    </div>
+                    {q.status === 'SERVING' && <span className="ml-auto text-[10px] font-black text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">Serving</span>}
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}
@@ -473,9 +529,13 @@ export default function CustomerVendorPage() {
     );
   }
 
+  // Hidden canvas for photo capture
+  const hiddenCanvas = <canvas ref={canvasRef} style={{ display: 'none' }} />;
+
   // --- REGISTRATION SCREEN ---
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
+      {hiddenCanvas}
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-600/10 to-transparent blur-3xl -z-10"></div>
 
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-slate-200/50 border border-white p-8 relative z-10">
@@ -531,26 +591,31 @@ export default function CustomerVendorPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Live Photo Verification</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Live Photo (Optional)</label>
               {!photo && !isCapturing && (
-                <button type="button" onClick={() => setIsCapturing(true)} className="w-full h-36 border-2 border-dashed border-slate-300 bg-slate-50 rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-100 hover:border-slate-400 transition-all">
+                <button type="button" onClick={startCamera} className="w-full h-36 border-2 border-dashed border-slate-300 bg-slate-50 rounded-2xl flex flex-col items-center justify-center text-slate-500 hover:bg-slate-100 hover:border-slate-400 transition-all active:scale-[0.98]">
                   <Camera className="w-8 h-8 mb-2 text-slate-400" />
                   <span className="font-bold">Tap to open camera</span>
                 </button>
               )}
               {isCapturing && (
                 <div className="relative rounded-2xl overflow-hidden bg-black z-10 shadow-lg border border-slate-800">
-                  <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} mirrored={true} className="w-full object-cover" />
-                  <button type="button" onClick={capturePhoto} className="absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all">
-                    Capture
-                  </button>
+                  <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', transform: 'scaleX(-1)' }} className="object-cover" />
+                  <div className="absolute bottom-4 left-0 w-full flex justify-center gap-3">
+                    <button type="button" onClick={capturePhoto} disabled={!cameraReady} className="px-8 py-3 bg-white text-slate-900 font-black tracking-wide uppercase text-sm rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50">
+                      {cameraReady ? 'Capture' : 'Loading...'}
+                    </button>
+                    <button type="button" onClick={stopCamera} className="px-6 py-3 bg-red-500 text-white font-bold text-sm rounded-full shadow-xl hover:bg-red-600 active:scale-95 transition-all">
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
               {photo && (
                 <div className="relative rounded-2xl overflow-hidden border-4 border-white shadow-xl group">
                   <img src={photo} alt="Selfie" className="w-full object-cover h-48 transition-transform group-hover:scale-105" />
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button type="button" onClick={() => {setPhoto(null); setIsCapturing(true);}} className="px-5 py-2 bg-white/90 backdrop-blur-md text-slate-900 font-bold rounded-xl text-sm shadow-lg hover:scale-105 transition-all">Retake</button>
+                    <button type="button" onClick={() => {setPhoto(null); startCamera();}} className="px-5 py-2 bg-white/90 backdrop-blur-md text-slate-900 font-bold rounded-xl text-sm shadow-lg hover:scale-105 transition-all">Retake</button>
                   </div>
                 </div>
               )}
